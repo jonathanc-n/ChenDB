@@ -8,6 +8,7 @@ skiplist.h
 #include <assert.h>
 #include <atomic>
 #include "../../utils/comparator.h"
+#include "../memory/allocator.h"
 
 template <typename Key> 
 class SkipList {
@@ -58,6 +59,8 @@ public:
 
   private:
     int32_t max_skiplist_height_;
+
+    Allocator* const allocator_;
 
     Node* const head_;
     Node* NewNode(const Key& key, int height);
@@ -149,12 +152,11 @@ inline void SkipList<Key>::Iterator::Prev() {
   
 }
 
-// template <typename Key>
-// typename SkipList<Key>::NewNode(const Key& key, int height) {
-//   Node new_node;
-//   new_node.key = key;
-//   new_node.height_ = height;
-// }
+template <typename Key>
+typename SkipList<Key>::Node* SkipList<Key>::NewNode(const Key& key, int height) {
+  char* mem = allocator_->AllocateAligned(sizeof(Node) + sizeof(std::atomic<Node*>) * (height - 1));
+  return new (mem) Node(key);
+}
 
 template <typename Key>
 inline bool SkipList<Key>::IsEqual(const Key& key_one, const Key& key_two) const {
