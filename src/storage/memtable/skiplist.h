@@ -1,6 +1,11 @@
+/*
+skiplist.h
+
+*/
 
 #pragma once
 #include <stdlib.h>
+#include <assert.h>
 #include <atomic>
 #include "../../utils/comparator.h"
 
@@ -27,13 +32,13 @@ public:
       explicit Iterator(const SkipList* list);
 
       // Allows for changing the iterator to a new list
-      void SetList();
-
-      // Returns the key at the current position
-      const Key& GetKey();
+      void SetList(const SkipList* list);
 
       // Returns true if the node the iterator is on is valid
       bool Valid();
+
+      // Returns the key at the current position
+      const Key& GetKey() const;
 
       // Place iterator at the first entry where key >= target
       void Seek(const Key& target);
@@ -55,17 +60,118 @@ public:
     int32_t max_skiplist_height_;
 
     Node* const head_;
-    Node* NewNode(Key& key, int height);
+    Node* NewNode(const Key& key, int height);
     int RandomHeight();
     
-    
+    std::atomic<int> max_height_;
+    inline int GetMaxHeight() const {
+      return max_height_.load(std::memory_order_acquire);
+    }
+
     bool IsEqual(const Key& key_one, const Key& key_two) const;
     bool IsGreaterThan(const Key& key, Node* node) const;
     bool IsLessThan(const Key& key, Node* node) const;
-
-    std::atomic<int> max_height_;
-
+    
+    // Find first node that is 
     Node* FindAheadNode(const Key& key) const;
-    Node* FindLessThan(const Key& key) const;
+    Node* FindBehindNode(const Key& key) const;
     Node* FindLast() const;
 };
+
+template <typename Key>
+struct SkipList<Key>::Node {
+  explicit Node(const Key& k) : key(k) {}
+  Key const key;
+  
+  Node* GetNext(int n) {
+    assert(n >= 0);
+    return next_[n].load(std::memory_order_acquire);
+  }
+
+  void SetNextNode(int n, Node* new_node) {
+    assert(n >= 0);
+    next_[n].store(new_node, std::memory_order_release);
+  }
+
+  Node* GetNextRelaxed(int n) {
+    assert(n >= 0);
+    return next_[n].load(std::memory_order_relaxed);
+  }
+
+  void SetNextNodeRelaxed(int n, Node* new_node) {
+    assert(n >= 0);
+    next_[n].store(std::memory_order_relaxed);
+  }
+
+  private:
+    std::atomic<Node*> next_[1];
+};
+
+template <typename Key>
+inline SkipList<Key>::Iterator::Iterator(const SkipList* skip_list) {
+  setList(skip_list);
+}
+
+template <typename Key>
+inline void SkipList<Key>::Iterator::SetList(const SkipList* skip_list) {
+  list_ = skip_list;
+  Node* node = nullptr;
+}
+
+template <typename Key>
+inline bool SkipList<Key>::Iterator::Valid() {
+  return node_ != nullptr;
+}
+
+template <typename Key>
+inline const Key& SkipList<Key>::Iterator::GetKey() const  {
+  assert(Valid());
+  return node_->key;
+};
+
+template <typename Key>
+inline void SkipList<Key>::Iterator::Seek(const Key& target)  {
+  node_ = list_->FindAheadNode(target);
+};
+
+template <typename Key>
+inline void SkipList<Key>::Iterator::SeekPrevious(const Key& target) {
+  node_ = list_->FindBehindNode(target);
+}
+
+template <typename Key>
+inline void SkipList<Key>::Iterator::Next() {
+
+}
+
+template <typename Key>
+inline void SkipList<Key>::Iterator::Prev() {
+  
+}
+
+// template <typename Key>
+// typename SkipList<Key>::NewNode(const Key& key, int height) {
+//   Node new_node;
+//   new_node.key = key;
+//   new_node.height_ = height;
+// }
+
+template <typename Key>
+inline bool SkipList<Key>::IsEqual(const Key& key_one, const Key& key_two) const {
+  return key_one == key_two;
+}
+
+template <typename Key>
+inline bool SkipList<Key>::IsGreaterThan(const Key& key, Node* node) const {
+  return (key > node->key);
+}
+
+template <typename Key>
+inline bool SkipList<Key>::IsLessThan(const Key& key, Node* node) const {
+  return (key < node->key);
+}
+
+template <typename Key>
+typename SkipList<Key>::Node* SkipList<Key>::FindAheadNode(const Key& key) const {
+  
+}
