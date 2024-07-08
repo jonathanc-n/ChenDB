@@ -7,6 +7,7 @@ skiplist.h
 #include <stdlib.h>
 #include <assert.h>
 #include <atomic>
+#include <type_traits>
 #include "../../utils/comparator.h"
 #include "../memory/allocator.h"
 
@@ -144,12 +145,17 @@ inline void SkipList<Key>::Iterator::SeekPrevious(const Key& target) {
 
 template <typename Key>
 inline void SkipList<Key>::Iterator::Next() {
-
+  assert(Valid());
+  node_ = node_->next();
 }
 
 template <typename Key>
 inline void SkipList<Key>::Iterator::Prev() {
-  
+  assert(Valid());
+  node_ = list_->FindBehindNode(node_->key);
+  if (node_ == list_->head_) {
+    node_ = nullptr;
+  }
 }
 
 template <typename Key>
