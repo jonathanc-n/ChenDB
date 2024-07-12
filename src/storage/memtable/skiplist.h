@@ -42,14 +42,14 @@ public:
       // Returns the key at the current position
       const Key& GetKey() const;
 
+      void Next();
+      void Prev();
+
       // Place iterator at the first entry where key >= target
       void Seek(const Key& target);
 
       // Place iterator with a key <= target
       void SeekPrevious(const Key& target);
-
-      void Next();
-      void Prev();
       void PositionAtStart();
       void PositionAtEnd();
 
@@ -59,7 +59,9 @@ public:
   };
 
   private:
-    int32_t max_skiplist_height_;
+    const int32_t max_skiplist_height_;
+    const int32_t kBranching_;
+    const uint32_t kScaledInverseBranching_;
 
     Allocator* const allocator_;
 
@@ -76,7 +78,7 @@ public:
     bool IsGreaterThan(const Key& key, Node* node) const;
     bool IsLessThan(const Key& key, Node* node) const;
     
-    // Find first node that is 
+    // Find first node that is greater or equal
     Node* FindAheadNode(const Key& key) const;
     Node* FindBehindNode(const Key& key) const;
     Node* FindLast() const;
@@ -134,16 +136,6 @@ inline const Key& SkipList<Key>::Iterator::GetKey() const  {
 };
 
 template <typename Key>
-inline void SkipList<Key>::Iterator::Seek(const Key& target)  {
-  node_ = list_->FindAheadNode(target);
-};
-
-template <typename Key>
-inline void SkipList<Key>::Iterator::SeekPrevious(const Key& target) {
-  node_ = list_->FindBehindNode(target);
-}
-
-template <typename Key>
 inline void SkipList<Key>::Iterator::Next() {
   assert(Valid());
   node_ = node_->next();
@@ -159,9 +151,51 @@ inline void SkipList<Key>::Iterator::Prev() {
 }
 
 template <typename Key>
+inline void SkipList<Key>::Iterator::Seek(const Key& target)  {
+  node_ = list_->FindAheadNode(target);
+};
+
+template <typename Key>
+inline void SkipList<Key>::Iterator::SeekPrevious(const Key& target) {
+  Seek(target);
+  if (!Valid()) {
+    SeekToLast();
+  }
+  while (Valid() && list_->LessThan(target, key())) {
+    Prev();
+  }
+}
+
+template <typename Key>
+inline void SkipList<Key>::Iterator::PositionAtStart() {
+  node_ = list_->head_->Next(0);
+}
+
+template <typename Key>
+inline void SkipeList<Key>::Iterator::PositionAtEnd() {
+  node_ = list_->FindLast();
+  if (node_ == list_->head_) {
+    node_ = nullptr;
+  }
+}
+
+template <typename Key>
 typename SkipList<Key>::Node* SkipList<Key>::NewNode(const Key& key, int height) {
   char* mem = allocator_->AllocateAligned(sizeof(Node) + sizeof(std::atomic<Node*>) * (height - 1));
   return new (mem) Node(key);
+}
+
+template <typename Key>
+const int SkipList<Key>::RandomHeight() {
+  auto random_var = Random::GetTLSInstance();
+
+  int height = 1;
+  while (height < max_skiplist_height_ && rnd->Next() < kScaledInverseBranching_) {
+    height++;
+  }
+  assert(height > 0);
+  assert(height <= kMaxHeight_);
+  return height;
 }
 
 template <typename Key>
@@ -181,5 +215,15 @@ inline bool SkipList<Key>::IsLessThan(const Key& key, Node* node) const {
 
 template <typename Key>
 typename SkipList<Key>::Node* SkipList<Key>::FindAheadNode(const Key& key) const {
+  
+}
+
+template <typename Key>
+typename SkipList<Key>::Node* SkipList<Key>::FindBehindNode(const Key& key) const {
+  
+}
+
+template <typename Key>
+typename SkipList<Key>::Node* SkipList<Key>::FindLast() const {
   
 }
