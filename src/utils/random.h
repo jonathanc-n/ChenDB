@@ -8,6 +8,8 @@ class Random {
     enum : uint64_t {
         A = 16807
     };
+    uint32_t seed_;
+
   public:
     uint32_t Next() {
       uint64_t product = seed_ * A;
@@ -19,4 +21,8 @@ class Random {
       }
       return seed_;
     }
+
+    // Returns a Random instance for use by the current thread without 
+    // additional locking
+    static Random* GetTLSInstance();
 }
