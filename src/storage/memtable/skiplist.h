@@ -1,147 +1,83 @@
-/*
-skiplist.h
-Inline Skip list
-- Splicing allows for moving elements between different data structures
-  without copying or reallocation
-- Both do operations in O(log n)
-*/
-
 #pragma once
-#include <stdlib.h>
 #include <assert.h>
+#include <stdlib.h>
 
-#include <algorithm>
 #include <atomic>
-#include <type_traits>
-
-#include "../../utils/comparator.h"
-#include "../memory/allocator.h"
 
 template <typename Key, class Comparator>
 class SkipList {
-private:
-  struct Node;
+  public:
+    explicit SkipList();
+    SkipList(const SkipList&) = delete;
+    void operator = (const SkipLiset&) = delete;
 
- public:
-  // Create a new SkipList object that will use "cmp" for comparing keys,
-  // and will allocate memory using "*allocator".  Objects allocated in the
-  // allocator must remain allocated for the lifetime of the skiplist object.
-  explicit SkipList(Comparator cmp, Allocator* allocator,
-                    int32_t max_height = 12, int32_t branching_factor = 4);
-  // No copying allowed
-  SkipList(const SkipList&) = delete;
-  void operator=(const SkipList&) = delete;
+    void Insert(const Key& key);
+    void Remove(const Key& key);
+    void Contains(const Key& key);
 
-  // Insert key into the list.
-  // REQUIRES: nothing that compares equal to key is currently in the list.
-  void Insert(const Key& key);
+    class Iterator {
+      public:
+        explicit Iterator(const SkipList* list);
+        bool ValidNode();
+        void SetList(const SkipList* list);
+        const Key& Key() const;
+        void Next();
+        void Prev();
+        void BackNext();
+        void BackPrev();
+        
+        void Seek(const Key& target);
 
-  // Returns true iff an entry that compares equal to key is in the list.
-  bool Contains(const Key& key) const;
+        // Backwards
+        void SeekPrev(const Key& target);
+        void SeekToFirst();
+        void SeekToLast();
+      private:
+        const SkipList* list_;
+        Node* node_;
+    }
+  
+  private:
+    struct Node;
 
-  // Return estimated number of entries smaller than `key`.
-  uint64_t EstimateCount(const Key& key) const;
+    Comparator const compare_;
 
-  // Iteration over the contents of a skip list
-  class Iterator {
-   public:
-    // Initialize an iterator over the specified list.
-    // The returned iterator is not valid.
-    explicit Iterator(const SkipList* list);
+    Node* const head_;
+    Node* const tail_;
 
-    // Change the underlying skiplist used for this iterator
-    // This enables us not changing the iterator without deallocating
-    // an old one and then allocating a new one
-    void SetList(const SkipList* list);
+    std::atomic<int> max_height_;
 
-    // Returns true iff the iterator is positioned at a valid node.
-    bool Valid() const;
+    inline int GetMaxHeight(){
+      return max_height_.load(std::memory_order_relaxed);
+    }
 
-    // Returns the key at the current position.
-    // REQUIRES: Valid()
-    const Key& key() const;
+    Node* NewNode(const Key& key, int height);
+    int RandomHeight();
 
-    // Advances to the next position.
-    // REQUIRES: Valid()
-    void Next();
+    bool Equal(const Key& a, const Key& b) const { return (compare_(a, b) == 0); }
 
-    // Advances to the previous position.
-    // REQUIRES: Valid()
-    void Prev();
+    bool LessThan(const Key& a, const Key& b) const {
+      return (compare_(a, b) < 0);
+    }
 
-    // Advance to the first entry with a key >= target
-    void Seek(const Key& target);
+    bool KeyIsAfterNode(const Key& key, Node* n) const;
 
-    // Retreat to the last entry with a key <= target
-    void SeekForPrev(const Key& target);
+    // For backwards iteration
+    bool KeyIsBeforeNode(const Key& key, Node* n)
 
-    // Position at the first entry in list.
-    // Final state of iterator is Valid() iff list is not empty.
-    void SeekToFirst();
+    Node* FindGreaterOrEqual(const Key& key) const;
+    Node* FindLessThan(const Key& key, Node** prev = nullptr) const;
 
-    // Position at the last entry in list.
-    // Final state of iterator is Valid() iff list is not empty.
-    void SeekToLast();
+    //
+    Node* FindLessOrEqual(const Key& key) const;
+    Node* FindGreaterThan(const Key& key, Node** prev = nullptr) const;
 
-   private:
-    const SkipList* list_;
-    Node* node_;
-    // Intentionally copyable
-  };
+    Node* FindLast() const;
+}
 
- private:
-  const uint16_t kMaxHeight_;
-  const uint16_t kBranching_;
-  const uint32_t kScaledInverseBranching_;
-
-  // Immutable after construction
-  Comparator const compare_;
-  Allocator* const allocator_;  // Allocator used for allocations of nodes
-
-  Node* const head_;
-
-  // Modified only by Insert().  Read racily by readers, but stale
-  // values are ok.
-  std::atomic<int> max_height_;  // Height of the entire list
-
-  // Used for optimizing sequential insert patterns.  Tricky.  prev_[i] for
-  // i up to max_height_ is the predecessor of prev_[0] and prev_height_
-  // is the height of prev_[0].  prev_[0] can only be equal to head before
-  // insertion, in which case max_height_ and prev_height_ are 1.
-  Node** prev_;
-  int32_t prev_height_;
-
-  inline int GetMaxHeight() const {
-    return max_height_.load(std::memory_order_relaxed);
-  }
-
-  Node* NewNode(const Key& key, int height);
-  int RandomHeight();
-  bool Equal(const Key& a, const Key& b) const { return (compare_(a, b) == 0); }
-  bool LessThan(const Key& a, const Key& b) const {
-    return (compare_(a, b) < 0);
-  }
-
-  // Return true if key is greater than the data stored in "n"
-  bool KeyIsAfterNode(const Key& key, Node* n) const;
-
-  // Returns the earliest node with a key >= key.
-  // Return nullptr if there is no such node.
-  Node* FindGreaterOrEqual(const Key& key) const;
-
-  // Return the latest node with a key < key.
-  // Return head_ if there is no such node.
-  // Fills prev[level] with pointer to previous node at "level" for every
-  // level in [0..max_height_-1], if prev is non-null.
-  Node* FindLessThan(const Key& key, Node** prev = nullptr) const;
-
-  // Return the last node in the list.
-  // Return head_ if list is empty.
-  Node* FindLast() const;
-};
-
-// Implementation details below
-template <typename Key, class Comparator>
+// Note that in the future, when a node is being placed, both the backward
+// and forward iterations should be accounted for.
+template <typename Key, class Comparator> 
 struct SkipList<Key, Comparator>::Node {
   explicit Node(const Key& k) : key(k) {}
 
@@ -152,9 +88,62 @@ struct SkipList<Key, Comparator>::Node {
     return (next_[n].load(std::memory_order_acquire));
   }
 
-  Node* 
+  // For backward iterations
+  Node* Prev(int n) {
+    assert(n >= 0);
+    return (next_[n].load(std::memory_order_acquire));
+  }
+
+  void SetNext(int n, Node* new_node) {
+    assert(n >= 0);
+    next_[n].store(new_node, std::memory_order_release);
+  }
+
+  Node* SetPrev(int n, Node* new_node) {
+    assert(n >= 0);
+    prev_[n].store(new_node, std::memory_order_release);
+  }
 
   private:
-    // 
     std::atomic<Node*> next_[1];
+    std::atomic<Node*> prev_[1];
 }
+
+// TODO: allocator for instantiating a new node
+
+template <typename Key, class Comparator>
+inline SkipList<Key, Comparator>::Iterator::Iterator(const SkipList* list) {
+  SetList(list);
+}
+
+template <typename Key, class Comparator>
+inline bool SkipList<Key, Comparator>::Iterator::ValidNode(const Node* n) const {
+  return node_ != nullptr;
+}
+
+template <typename Key, class Comparator>
+inline SkipList<Key, Comparator>::Iterator::SetList(const SkipList* list) {
+  list_ = list;
+  node_ = nullptr;
+}
+
+template <typename Key, class Comparator>
+inline SkipList<Key, Comparator>::Iterator::Key() {
+  assert(ValidNode());
+  return node_->key;
+}
+
+// TODO: here
+template <typename Key, class Comparator>
+void SkipList<Key, Comparator>::Iterator::Next() {
+  assert(ValidNode());
+  node_->Next(0);
+}
+
+template <typename Key, class Comparator>
+void SkipList<Key, Comparator>::Iterator::Prev() {
+  assert(ValidNode());
+  node_->Prev(0);
+}
+
+
